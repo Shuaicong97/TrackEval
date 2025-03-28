@@ -52,7 +52,7 @@ if __name__ == '__main__':
     config = {**default_eval_config, **default_dataset_config, **default_metrics_config}  # Merge default configs
     parser = argparse.ArgumentParser()
     for setting in config.keys():
-        if type(config[setting]) == list or type(config[setting]) == type(None):
+        if type(config[setting]) == list:
             parser.add_argument("--" + setting, nargs='+')
         else:
             parser.add_argument("--" + setting)
