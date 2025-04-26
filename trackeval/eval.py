@@ -39,6 +39,8 @@ class Evaluator:
             'OUTPUT_EMPTY_CLASSES': True,  # If False, summary files are not output for classes with no detections
             'OUTPUT_DETAILED': True,
             'PLOT_CURVES': True,
+
+            'SAVE_PATH': '../results/id_mapping.jsonl',
         }
         return default_config
 
@@ -86,7 +88,7 @@ class Evaluator:
                             with Pool(config['NUM_PARALLEL_CORES']) as pool, tqdm.tqdm(total=len(seq_list)) as pbar:
                                 _eval_sequence = partial(eval_sequence, dataset=dataset, tracker=tracker,
                                                          class_list=class_list, metrics_list=metrics_list,
-                                                         metric_names=metric_names)
+                                                         metric_names=metric_names, save_path=config['SAVE_PATH'])
                                 results = []
                                 for r in pool.imap(_eval_sequence, seq_list_sorted,
                                                    chunksize=20):
@@ -98,7 +100,7 @@ class Evaluator:
                             with Pool(config['NUM_PARALLEL_CORES']) as pool:
                                 _eval_sequence = partial(eval_sequence, dataset=dataset, tracker=tracker,
                                                          class_list=class_list, metrics_list=metrics_list,
-                                                         metric_names=metric_names)
+                                                         metric_names=metric_names, save_path=config['SAVE_PATH'])
                                 results = pool.map(_eval_sequence, seq_list)
                                 res = dict(zip(seq_list, results))
                     else:
@@ -107,11 +109,11 @@ class Evaluator:
                             seq_list_sorted = sorted(seq_list)
                             for curr_seq in tqdm.tqdm(seq_list_sorted):
                                 res[curr_seq] = eval_sequence(curr_seq, dataset, tracker, class_list, metrics_list,
-                                                              metric_names)
+                                                              metric_names, config['SAVE_PATH'])
                         else:
                             for curr_seq in sorted(seq_list):
                                 res[curr_seq] = eval_sequence(curr_seq, dataset, tracker, class_list, metrics_list,
-                                                              metric_names)
+                                                              metric_names, config['SAVE_PATH'])
 
                     # Combine results over all sequences and then over all classes
 
@@ -212,7 +214,7 @@ class Evaluator:
 
 
 @_timing.time
-def eval_sequence(seq, dataset, tracker, class_list, metrics_list, metric_names):
+def eval_sequence(seq, dataset, tracker, class_list, metrics_list, metric_names, save_path):
     """Function for evaluating a single sequence"""
 
     raw_data = dataset.get_raw_seq_data(tracker, seq)
@@ -221,5 +223,8 @@ def eval_sequence(seq, dataset, tracker, class_list, metrics_list, metric_names)
         seq_res[cls] = {}
         data = dataset.get_preprocessed_seq_data(raw_data, cls)
         for metric, met_name in zip(metrics_list, metric_names):
-            seq_res[cls][met_name] = metric.eval_sequence(data)
+            if met_name == 'HOTA':
+                seq_res[cls][met_name] = metric.eval_sequence(data, save_path)
+            else:
+                seq_res[cls][met_name] = metric.eval_sequence(data)
     return seq_res

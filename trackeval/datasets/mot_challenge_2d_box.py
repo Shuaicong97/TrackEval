@@ -419,6 +419,7 @@ class MotChallenge2DBox(_BaseDataset):
 
         # Re-label IDs such that there are no empty IDs
         if len(unique_gt_ids) > 0:
+            # Remove duplicates, ascending order
             unique_gt_ids = np.unique(unique_gt_ids)
             gt_id_map = np.nan * np.ones((np.max(unique_gt_ids) + 1))
             gt_id_map[unique_gt_ids] = np.arange(len(unique_gt_ids))
@@ -440,6 +441,8 @@ class MotChallenge2DBox(_BaseDataset):
         data['num_gt_ids'] = len(unique_gt_ids)
         data['num_timesteps'] = raw_data['num_timesteps']
         data['seq'] = raw_data['seq']
+        data['unique_gt_ids'] = unique_gt_ids
+        data['unique_tracker_ids'] = unique_tracker_ids
 
         # Ensure again that ids are unique per timestep after preproc.
         self._check_unique_ids(data, after_preproc=True)

@@ -1,4 +1,4 @@
-
+import json
 import os
 import csv
 import argparse
@@ -140,6 +140,12 @@ def load_detail(file):
                     data[seq][key] = float(value)
     return data
 
+def save_id_mapping(content, save_path):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    file_exists = os.path.isfile(save_path)
+    id_mapping_str = json.dumps(content, ensure_ascii=False)
+    with open(save_path, 'a' if file_exists else 'w', encoding='utf-8') as f:
+        f.write(id_mapping_str + '\n')
 
 class TrackEvalException(Exception):
     """Custom exception for catching expected errors."""

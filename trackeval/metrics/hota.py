@@ -4,6 +4,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 from ._base_metric import _BaseMetric
 from .. import _timing
+from ..utils import save_id_mapping
 
 
 class HOTA(_BaseMetric):
@@ -20,9 +21,10 @@ class HOTA(_BaseMetric):
         self.float_fields = ['HOTA(0)', 'LocA(0)', 'HOTALocA(0)']
         self.fields = self.float_array_fields + self.integer_array_fields + self.float_fields
         self.summary_fields = self.float_array_fields + self.float_fields
+        self.id_mapping = {}
 
     @_timing.time
-    def eval_sequence(self, data):
+    def eval_sequence(self, data, save_path):
         """Calculates the HOTA metrics for one sequence"""
 
         # Initialise results
@@ -68,6 +70,8 @@ class HOTA(_BaseMetric):
         global_alignment_score = potential_matches_count / (gt_id_count + tracker_id_count - potential_matches_count)
         matches_counts = [np.zeros_like(potential_matches_count) for _ in self.array_labels]
 
+        alpha_match_gts = []
+        alpha_match_tracks = []
         # Calculate scores for each timestep
         for t, (gt_ids_t, tracker_ids_t) in enumerate(zip(data['gt_ids'], data['tracker_ids'])):
             # Deal with the case that there are no gt_det/tracker_det in a timestep.
@@ -82,11 +86,14 @@ class HOTA(_BaseMetric):
 
             # Get matching scores between pairs of dets for optimizing HOTA
             similarity = data['similarity_scores'][t]
+            # score_mat[i][j] means the score between i-th detection of gt and j-th detection of tracker
             score_mat = global_alignment_score[gt_ids_t[:, np.newaxis], tracker_ids_t[np.newaxis, :]] * similarity
 
             # Hungarian algorithm to find best matches
             match_rows, match_cols = linear_sum_assignment(-score_mat)
 
+            # The id mapping results under target_alpha will be used for the temporal grounding
+            target_alpha = 0.5
             # Calculate and accumulate basic statistics
             for a, alpha in enumerate(self.array_labels):
                 actually_matched_mask = similarity[match_rows, match_cols] >= alpha - np.finfo('float').eps
@@ -99,6 +106,9 @@ class HOTA(_BaseMetric):
                 if num_matches > 0:
                     res['LocA'][a] += sum(similarity[alpha_match_rows, alpha_match_cols])
                     matches_counts[a][gt_ids_t[alpha_match_rows], tracker_ids_t[alpha_match_cols]] += 1
+                if alpha == target_alpha and len(alpha_match_rows) > 0 and len(alpha_match_cols) > 0:
+                    alpha_match_gts.append((t, alpha_match_rows.tolist()))
+                    alpha_match_tracks.append((t, alpha_match_cols.tolist()))
 
         # Calculate association scores (AssA, AssRe, AssPr) for the alpha value.
         # First calculate scores per gt_id/tracker_id combo and then average over the number of detections.
@@ -114,6 +124,15 @@ class HOTA(_BaseMetric):
         # Calculate final scores
         res['LocA'] = np.maximum(1e-10, res['LocA']) / np.maximum(1e-10, res['HOTA_TP'])
         res = self._compute_final_fields(res)
+
+        self.id_mapping = {
+            'seq': data['seq'],
+            'unique_gt_ids': data['unique_gt_ids'].tolist(),
+            'unique_tracker_ids': data['unique_tracker_ids'].tolist(),
+            'alpha_match_gts': alpha_match_gts,
+            'alpha_match_tracks': alpha_match_tracks
+        }
+        save_id_mapping(self.id_mapping, save_path)
         return res
 
     def combine_sequences(self, all_res):
@@ -201,3 +220,6 @@ class HOTA(_BaseMetric):
         plt.savefig(out_file)
         plt.savefig(out_file.replace('.pdf', '.png'))
         plt.clf()
+
+    def get_id_mapping(self):
+        return self.id_mapping
