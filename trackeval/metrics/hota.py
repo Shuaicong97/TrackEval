@@ -70,12 +70,14 @@ class HOTA(_BaseMetric):
         global_alignment_score = potential_matches_count / (gt_id_count + tracker_id_count - potential_matches_count)
         matches_counts = [np.zeros_like(potential_matches_count) for _ in self.array_labels]
 
+        gt_ids_t_list = []
+        tracker_ids_t_list = []
         match_rows_list = []
         match_cols_list = []
         alpha_match_rows_list = []
         alpha_match_cols_list = []
-        gt_ids_t_list = []
-        tracker_ids_t_list = []
+        alpha_gt_ids_t_list = []
+        alpha_tracker_ids_t_list = []
         alpha_matches = []
         seen_pairs = set()
         # Calculate scores for each timestep
@@ -94,6 +96,9 @@ class HOTA(_BaseMetric):
             similarity = data['similarity_scores'][t]
             # score_mat[i][j] means the score between i-th detection of gt and j-th detection of tracker
             score_mat = global_alignment_score[gt_ids_t[:, np.newaxis], tracker_ids_t[np.newaxis, :]] * similarity
+
+            gt_ids_t_list.append((t, gt_ids_t.tolist()))
+            tracker_ids_t_list.append((t, tracker_ids_t.tolist()))
 
             # Hungarian algorithm to find best matches
             match_rows, match_cols = linear_sum_assignment(-score_mat)
@@ -117,8 +122,8 @@ class HOTA(_BaseMetric):
                 if alpha == target_alpha and len(alpha_match_rows) > 0 and len(alpha_match_cols) > 0:
                     alpha_match_rows_list.append((t, alpha_match_rows.tolist()))
                     alpha_match_cols_list.append((t, alpha_match_cols.tolist()))
-                    gt_ids_t_list.append((t, gt_ids_t.tolist()))
-                    tracker_ids_t_list.append((t, tracker_ids_t.tolist()))
+                    alpha_gt_ids_t_list.append((t, gt_ids_t.tolist()))
+                    alpha_tracker_ids_t_list.append((t, tracker_ids_t.tolist()))
                     for row_id, col_id in zip(alpha_match_rows, alpha_match_cols):
                         pair = (row_id, col_id)
                         if pair not in seen_pairs:
@@ -144,12 +149,14 @@ class HOTA(_BaseMetric):
             'seq': data['seq'],
             'unique_gt_ids': data['unique_gt_ids'].tolist(),
             'unique_tracker_ids': data['unique_tracker_ids'].tolist(),
+            'gt_ids_t_list': gt_ids_t_list,
+            'tracker_ids_t_list': tracker_ids_t_list,
             'match_rows_list': match_rows_list,
             'match_cols_list': match_cols_list,
             'alpha_match_rows_list': alpha_match_rows_list,
             'alpha_match_cols_list': alpha_match_cols_list,
-            'gt_ids_t_list': gt_ids_t_list,
-            'tracker_ids_t_list': tracker_ids_t_list,
+            'alpha_gt_ids_t_list': alpha_gt_ids_t_list,
+            'alpha_tracker_ids_t_list': alpha_tracker_ids_t_list,
             'alpha_row_col_matches': alpha_matches
         }
         save_id_mapping(self.id_mapping, save_path)
