@@ -70,8 +70,14 @@ class HOTA(_BaseMetric):
         global_alignment_score = potential_matches_count / (gt_id_count + tracker_id_count - potential_matches_count)
         matches_counts = [np.zeros_like(potential_matches_count) for _ in self.array_labels]
 
-        alpha_match_gts = []
-        alpha_match_tracks = []
+        match_rows_list = []
+        match_cols_list = []
+        alpha_match_rows_list = []
+        alpha_match_cols_list = []
+        gt_ids_t_list = []
+        tracker_ids_t_list = []
+        alpha_matches = []
+        seen_pairs = set()
         # Calculate scores for each timestep
         for t, (gt_ids_t, tracker_ids_t) in enumerate(zip(data['gt_ids'], data['tracker_ids'])):
             # Deal with the case that there are no gt_det/tracker_det in a timestep.
@@ -91,6 +97,8 @@ class HOTA(_BaseMetric):
 
             # Hungarian algorithm to find best matches
             match_rows, match_cols = linear_sum_assignment(-score_mat)
+            match_rows_list.append((t, match_rows.tolist()))
+            match_cols_list.append((t, match_cols.tolist()))
 
             # The id mapping results under target_alpha will be used for the temporal grounding
             target_alpha = 0.5
@@ -107,8 +115,15 @@ class HOTA(_BaseMetric):
                     res['LocA'][a] += sum(similarity[alpha_match_rows, alpha_match_cols])
                     matches_counts[a][gt_ids_t[alpha_match_rows], tracker_ids_t[alpha_match_cols]] += 1
                 if alpha == target_alpha and len(alpha_match_rows) > 0 and len(alpha_match_cols) > 0:
-                    alpha_match_gts.append((t, alpha_match_rows.tolist()))
-                    alpha_match_tracks.append((t, alpha_match_cols.tolist()))
+                    alpha_match_rows_list.append((t, alpha_match_rows.tolist()))
+                    alpha_match_cols_list.append((t, alpha_match_cols.tolist()))
+                    gt_ids_t_list.append((t, gt_ids_t.tolist()))
+                    tracker_ids_t_list.append((t, tracker_ids_t.tolist()))
+                    for row_id, col_id in zip(alpha_match_rows, alpha_match_cols):
+                        pair = (row_id, col_id)
+                        if pair not in seen_pairs:
+                            seen_pairs.add(pair)
+                            alpha_matches.append((t, int(row_id), int(col_id)))
 
         # Calculate association scores (AssA, AssRe, AssPr) for the alpha value.
         # First calculate scores per gt_id/tracker_id combo and then average over the number of detections.
@@ -129,8 +144,13 @@ class HOTA(_BaseMetric):
             'seq': data['seq'],
             'unique_gt_ids': data['unique_gt_ids'].tolist(),
             'unique_tracker_ids': data['unique_tracker_ids'].tolist(),
-            'alpha_match_gts': alpha_match_gts,
-            'alpha_match_tracks': alpha_match_tracks
+            'match_rows_list': match_rows_list,
+            'match_cols_list': match_cols_list,
+            'alpha_match_rows_list': alpha_match_rows_list,
+            'alpha_match_cols_list': alpha_match_cols_list,
+            'gt_ids_t_list': gt_ids_t_list,
+            'tracker_ids_t_list': tracker_ids_t_list,
+            'alpha_row_col_matches': alpha_matches
         }
         save_id_mapping(self.id_mapping, save_path)
         return res
